@@ -243,9 +243,18 @@ class GE:
             return self
         return GE(self.x, -self.y)
 
+    def __sub__(self, a):
+        """Subtract a group element from another."""
+        return self + (-a)
+
     def __eq__(self, a):
         """Check if two group elements are equal."""
         return (self - a).infinity
+
+    def has_even_y(self):
+        """Determine whether a non-infinity group element has an even y coordinate."""
+        assert not self.infinity
+        return self.y.is_even()
 
     def to_bytes_compressed(self):
         """Convert a non-infinite group element to 33-byte compressed encoding."""

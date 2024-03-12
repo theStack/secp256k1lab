@@ -261,13 +261,13 @@ class GE:
         return sum(ps, start=GE())
 
     @staticmethod
-    def mul(*aps):
+    def batch_mul(*aps):
         """Compute a (batch) scalar group element multiplication.
 
-        GE.mul((a1, p1), (a2, p2), (a3, p3)) is identical to a1*p1 + a2*p2 + a3*p3,
+        GE.batch_mul((a1, p1), (a2, p2), (a3, p3)) is identical to a1*p1 + a2*p2 + a3*p3,
         but more efficient."""
         # Reduce all the scalars modulo order first (so we can deal with negatives etc).
-        naps = [(a % GE.ORDER, p) for a, p in aps]
+        naps = [(int(a), p) for a, p in aps]
         # Start with point at infinity.
         r = GE()
         # Iterate over all bit positions, from high to low.
@@ -283,8 +283,8 @@ class GE:
     def __rmul__(self, a):
         """Multiply an integer with a group element."""
         if self == G:
-            return FAST_G.mul(int(a))
-        return GE.mul((int(a), self))
+            return FAST_G.mul(Scalar(a))
+        return GE.batch_mul((Scalar(a), self))
 
     def __neg__(self):
         """Compute the negation of a group element."""
@@ -430,7 +430,7 @@ class FastGEMul:
 
     def mul(self, a):
         result = GE()
-        a = a % GE.ORDER
+        a = int(a)
         for bit in range(a.bit_length()):
             if a & (1 << bit):
                 result += self.table[bit]

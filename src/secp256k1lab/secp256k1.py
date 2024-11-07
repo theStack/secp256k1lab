@@ -57,6 +57,9 @@ class APrimeFE:
         return type(self)(a) + self
 
     @classmethod
+    # REVIEW This should be
+    #    def sum(cls, *es: Iterable[Self]) -> Self:
+    # but Self needs the typing_extension package on Python <= 3.12.
     def sum(cls, *es):
         """Compute the sum of field elements.
 

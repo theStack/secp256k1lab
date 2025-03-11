@@ -135,18 +135,28 @@ class APrimeFE:
         return int(self).to_bytes(32, 'big')
 
     @classmethod
-    def from_bytes_checked(cls, b):
-        """Convert a 32-byte array to a field element (BE byte order, no overflow allowed)."""
-        v = int.from_bytes(b, 'big')
+    def from_int_checked(cls, v):
+        """Convert an integer to a field element (no overflow allowed)."""
         if v >= cls.SIZE:
             raise ValueError
         return cls(v)
 
     @classmethod
+    def from_int_wrapping(cls, v):
+        """Convert an integer to a field element (reduced modulo SIZE)."""
+        return cls(v % cls.SIZE)
+
+    @classmethod
+    def from_bytes_checked(cls, b):
+        """Convert a 32-byte array to a field element (BE byte order, no overflow allowed)."""
+        v = int.from_bytes(b, 'big')
+        return cls.from_int_checked(v)
+
+    @classmethod
     def from_bytes_wrapping(cls, b):
         """Convert a 32-byte array to a field element (BE byte order, reduced modulo SIZE)."""
         v = int.from_bytes(b, 'big')
-        return cls(v % cls.SIZE)
+        return cls.from_int_wrapping(v)
 
     def __str__(self):
         """Convert this field element to a 64 character hex string."""

@@ -1,6 +1,6 @@
 [project]
 name = "secp256k1lab"
-version = "0.1.0"
+version = "1.0.0"
 description = "An INSECURE implementation of the secp256k1 elliptic curve and related cryptographic schemes, intended for prototyping, experimentation and education"
 readme = "README.md"
 authors = [

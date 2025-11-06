@@ -85,6 +85,7 @@ class BIP352Tests(unittest.TestCase):
         outpoints = []
 
         pubkey_index = 0
+        assert len(test_vector['sending']) == 1
         input_pubkeys_hex = test_vector['sending'][0]['expected']['input_pub_keys']
 
         for vec in test_vector['sending'][0]['given']['vin']:

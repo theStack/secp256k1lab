@@ -7,7 +7,7 @@ import unittest
 from secp256k1lab.bip352 import (
     silentpayments_sender_create_outputs,
     silentpayments_recipient,
-    #silentpayments_recipient_create_label,
+    silentpayments_recipient_create_label,
     #silentpayments_recipient_create_labeled_spend_pubkey,
     silentpayments_recipient_prevouts_summary_create,
     silentpayments_recipient_scan_outputs,
@@ -178,8 +178,14 @@ class BIP352Tests(unittest.TestCase):
             assert test_vector['expected']['outputs'] == []
             return
 
-        # TODO: distribute labels cache if necessary
         labels_cache = None
+        label_integers = test_vector['given']['labels']
+        if label_integers:
+            labels_cache = {}
+            for m in label_integers:
+                label, label_tweak = silentpayments_recipient_create_label(scan_seckey, m)
+                labels_cache[label.to_bytes_compressed()] = label_tweak.to_bytes()
+
         found_outputs_info = silentpayments_recipient_scan_outputs(outputs_to_check, scan_seckey, prevouts_summary,
             spend_pubkey, labels_cache)
         found_outputs = [fo.output for fo in found_outputs_info]

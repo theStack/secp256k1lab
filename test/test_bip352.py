@@ -74,9 +74,12 @@ class BIP352Tests(unittest.TestCase):
             for test_i, test_vector in enumerate(test_vectors):
                 with self.subTest(i=test_i):
                     print(f"\n===== BIP352 test case {test_i} -> {test_vector['comment']} =====")  # TODO: remove
-                    self.subtest_vectors_case(test_vector)
+                    self.subtest_vectors_case_sending(test_vector['sending'])
 
-    def subtest_vectors_case(self, test_vector):
+    def subtest_vectors_case_sending(self, test_vector):
+        assert len(test_vector) == 1
+        test_vector = test_vector[0]
+
         # determine input private and public keys, grouped into plain and taproot/x-only
         input_plain_seckeys = []
         input_taproot_seckeys = []
@@ -85,10 +88,9 @@ class BIP352Tests(unittest.TestCase):
         outpoints = []
 
         pubkey_index = 0
-        assert len(test_vector['sending']) == 1
-        input_pubkeys_hex = test_vector['sending'][0]['expected']['input_pub_keys']
+        input_pubkeys_hex = test_vector['expected']['input_pub_keys']
 
-        for vec in test_vector['sending'][0]['given']['vin']:
+        for vec in test_vector['given']['vin']:
             outpoints.append((vec['txid'], vec['vout']))
 
             if pubkey_index < len(input_pubkeys_hex):
@@ -107,7 +109,7 @@ class BIP352Tests(unittest.TestCase):
 
         outpoint_L = smallest_outpoint(outpoints)
         recipients = []
-        for index, recipient_data in enumerate(test_vector['sending'][0]['given']['recipients']):
+        for index, recipient_data in enumerate(test_vector['given']['recipients']):
             recipients.append(silentpayments_recipient(
                 GE.from_bytes_compressed(bytes.fromhex(recipient_data['scan_pub_key'])),
                 GE.from_bytes_compressed(bytes.fromhex(recipient_data['spend_pub_key'])),
@@ -115,7 +117,7 @@ class BIP352Tests(unittest.TestCase):
             ))
 
         expected_outputs_candidates = []
-        for outputs in test_vector['sending'][0]['expected']['outputs']:
+        for outputs in test_vector['expected']['outputs']:
             expected_outputs_candidate = []
             for output in outputs:
                 expected_outputs_candidate.append(bytes.fromhex(output))

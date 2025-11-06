@@ -10,7 +10,7 @@ from secp256k1lab.bip352 import (
     #silentpayments_recipient_create_label,
     #silentpayments_recipient_create_labeled_spend_pubkey,
     silentpayments_recipient_prevouts_summary_create,
-    #silentpayments_recipient_scan_outputs,
+    silentpayments_recipient_scan_outputs,
 )
 from secp256k1lab.secp256k1 import GE, G, Scalar
 
@@ -167,12 +167,23 @@ class BIP352Tests(unittest.TestCase):
         spend_seckey = bytes.fromhex(test_vector['given']['key_material']['spend_priv_key'])
         spend_pubkey = Scalar.from_bytes_checked(spend_seckey) * G
 
+        expected_outputs = [bytes.fromhex(eo['pub_key']) for eo in test_vector['expected']['outputs']]
+
         try:
             prevouts_summary = silentpayments_recipient_prevouts_summary_create(
                 ikm.smallest_outpoint, ikm.xonly_pubkeys, ikm.plain_pubkeys)
             all_input_pubkeys = ikm.plain_pubkeys + ikm.xonly_pubkeys
             self.assertEqual(GE.sum(*all_input_pubkeys), prevouts_summary.pubkey_sum)
         except:
-            print("TODO: pubkey sum to zero case")
+            assert test_vector['expected']['outputs'] == []
+            return
 
+        found_outputs_info = silentpayments_recipient_scan_outputs(outputs_to_check, scan_seckey, prevouts_summary,
+            spend_pubkey)
+        found_outputs = [fo.output for fo in found_outputs_info]
+
+        success = sorted(found_outputs) == sorted(expected_outputs)
+        if not success:
+            print(f"found outputs: {[o.hex() for o in found_outputs]}")
+            print(f"expected outputs: {[o.hex() for o in expected_outputs]}")
         # TODO: implement labels testing

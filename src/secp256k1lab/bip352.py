@@ -134,7 +134,7 @@ def silentpayments_recipient_scan_outputs(tx_outputs: List[bytes], scan_key: byt
                                           unlabeled_spend_pubkey: GE) -> List[silentpayments_found_output]:
     # calculate the shared secret
     secret_component = prevouts_summary.input_hash * Scalar.from_bytes_checked(scan_key)
-    shared_secret = secret_component * unlabeled_spend_pubkey
+    shared_secret = (secret_component * unlabeled_spend_pubkey).to_bytes_compressed()
 
     # scan through all outputs starting with k = 0;
     # if an output is found, repeat with k = 1, etc.

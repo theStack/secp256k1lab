@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+from typing import List, NamedTuple
 import unittest
 
 from secp256k1lab.bip352 import (
@@ -63,6 +64,14 @@ def get_pubkey_from_input(input_data, pubkey_hex):
         return pubkey
 
 
+class InputKeyMaterial(NamedTuple):
+    plain_seckeys: List[bytes]
+    taproot_seckeys: List[bytes]
+    plain_pubkeys: List[GE]
+    xonly_pubkeys: List[GE]
+    smallest_outpoint: bytes
+
+
 class BIP352Tests(unittest.TestCase):
     """Test Silent Payments (BIP 352)."""
     def test_vectors(self):
@@ -74,12 +83,10 @@ class BIP352Tests(unittest.TestCase):
             for test_i, test_vector in enumerate(test_vectors):
                 with self.subTest(i=test_i):
                     print(f"\n===== BIP352 test case {test_i} -> {test_vector['comment']} =====")  # TODO: remove
-                    self.subtest_vectors_case_sending(test_vector['sending'])
+                    input_key_material = self.get_input_key_material(test_vector)
+                    self.subtest_vectors_case_sending(test_vector['sending'], input_key_material)
 
-    def subtest_vectors_case_sending(self, test_vector):
-        assert len(test_vector) == 1
-        test_vector = test_vector[0]
-
+    def get_input_key_material(self, test_vector):
         # determine input private and public keys, grouped into plain and taproot/x-only
         input_plain_seckeys = []
         input_taproot_seckeys = []
@@ -88,9 +95,9 @@ class BIP352Tests(unittest.TestCase):
         outpoints = []
 
         pubkey_index = 0
-        input_pubkeys_hex = test_vector['expected']['input_pub_keys']
+        input_pubkeys_hex = test_vector['sending'][0]['expected']['input_pub_keys']
 
-        for vec in test_vector['given']['vin']:
+        for vec in test_vector['sending'][0]['given']['vin']:
             outpoints.append((vec['txid'], vec['vout']))
 
             if pubkey_index < len(input_pubkeys_hex):
@@ -108,6 +115,13 @@ class BIP352Tests(unittest.TestCase):
                 # len(pubkey) == 0, it's a NUMS_H input - skip without incrementing
 
         outpoint_L = smallest_outpoint(outpoints)
+        return InputKeyMaterial(input_plain_seckeys, input_taproot_seckeys,
+            input_plain_pubkeys, input_xonly_pubkeys, outpoint_L)
+
+    def subtest_vectors_case_sending(self, test_vector, ikm):
+        assert len(test_vector) == 1
+        test_vector = test_vector[0]
+
         recipients = []
         for index, recipient_data in enumerate(test_vector['given']['recipients']):
             recipients.append(silentpayments_recipient(
@@ -124,7 +138,8 @@ class BIP352Tests(unittest.TestCase):
             expected_outputs_candidates.append(expected_outputs_candidate)
 
         try:
-            created_outputs = silentpayments_sender_create_outputs(recipients, outpoint_L, input_taproot_seckeys, input_plain_seckeys)
+            created_outputs = silentpayments_sender_create_outputs(recipients, ikm.smallest_outpoint,
+                ikm.taproot_seckeys, ikm.plain_seckeys)
         except Exception:
             # if exception occured, treat this as "no outputs created"
             created_outputs = []

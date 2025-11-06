@@ -9,10 +9,10 @@ from secp256k1lab.bip352 import (
     silentpayments_recipient,
     #silentpayments_recipient_create_label,
     #silentpayments_recipient_create_labeled_spend_pubkey,
-    #silentpayments_recipient_prevouts_summary_create,
+    silentpayments_recipient_prevouts_summary_create,
     #silentpayments_recipient_scan_outputs,
 )
-from secp256k1lab.secp256k1 import GE
+from secp256k1lab.secp256k1 import GE, G, Scalar
 
 
 # test data extraction functionality copied from secp256k1 PR #1765, tools/tests_silentpayments_generate.py
@@ -85,6 +85,7 @@ class BIP352Tests(unittest.TestCase):
                     print(f"\n===== BIP352 test case {test_i} -> {test_vector['comment']} =====")  # TODO: remove
                     input_key_material = self.get_input_key_material(test_vector)
                     self.subtest_vectors_case_sending(test_vector['sending'], input_key_material)
+                    self.subtest_vectors_case_receiving(test_vector['receiving'], input_key_material)
 
     def get_input_key_material(self, test_vector):
         # determine input private and public keys, grouped into plain and taproot/x-only
@@ -155,3 +156,23 @@ class BIP352Tests(unittest.TestCase):
             for expected_outputs_candidate in expected_outputs_candidates:
                 print(f"    {[e.hex() for e in expected_outputs_candidate]}")
         self.assertTrue(success)
+
+    def subtest_vectors_case_receiving(self, test_vector, ikm):
+        if len(test_vector) != 1:
+            print("TODO: skipping receiving test for now, need to support multiple sub-cases")
+        test_vector = test_vector[0]
+
+        outputs_to_check = [bytes.fromhex(o) for o in test_vector['given']['outputs']]
+        scan_seckey = bytes.fromhex(test_vector['given']['key_material']['scan_priv_key'])
+        spend_seckey = bytes.fromhex(test_vector['given']['key_material']['spend_priv_key'])
+        spend_pubkey = Scalar.from_bytes_checked(spend_seckey) * G
+
+        try:
+            prevouts_summary = silentpayments_recipient_prevouts_summary_create(
+                ikm.smallest_outpoint, ikm.xonly_pubkeys, ikm.plain_pubkeys)
+            all_input_pubkeys = ikm.plain_pubkeys + ikm.xonly_pubkeys
+            self.assertEqual(GE.sum(*all_input_pubkeys), prevouts_summary.pubkey_sum)
+        except:
+            print("TODO: pubkey sum to zero case")
+
+        # TODO: implement labels testing

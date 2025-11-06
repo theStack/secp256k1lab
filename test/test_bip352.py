@@ -6,10 +6,10 @@ import unittest
 from secp256k1lab.bip352 import (
     silentpayments_sender_create_outputs,
     silentpayments_recipient,
-    silentpayments_recipient_create_label,
-    silentpayments_recipient_create_labeled_spend_pubkey,
-    silentpayments_recipient_prevouts_summary_create,
-    silentpayments_recipient_scan_outputs,
+    #silentpayments_recipient_create_label,
+    #silentpayments_recipient_create_labeled_spend_pubkey,
+    #silentpayments_recipient_prevouts_summary_create,
+    #silentpayments_recipient_scan_outputs,
 )
 from secp256k1lab.secp256k1 import GE
 
@@ -122,7 +122,7 @@ class BIP352Tests(unittest.TestCase):
 
         try:
             created_outputs = silentpayments_sender_create_outputs(recipients, outpoint_L, input_taproot_seckeys, input_plain_seckeys)
-        except:
+        except Exception:
             # if exception occured, treat this as "no outputs created"
             created_outputs = []
 
@@ -133,7 +133,7 @@ class BIP352Tests(unittest.TestCase):
                 break
         if not success:
             print(f"created outputs: {[c.hex() for c in created_outputs]}")
-            print(f"expected outputs: ")
+            print( "expected outputs: ")
             for expected_outputs_candidate in expected_outputs_candidates:
                 print(f"    {[e.hex() for e in expected_outputs_candidate]}")
         self.assertTrue(success)

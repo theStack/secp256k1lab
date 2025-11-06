@@ -4,7 +4,7 @@
 # by providing an executable pseudo-code of it
 from typing import List, NamedTuple
 
-from .secp256k1 import FE, GE, G, Scalar
+from .secp256k1 import GE, G, Scalar
 from .util import tagged_hash
 
 
@@ -14,7 +14,7 @@ class silentpayments_recipient(NamedTuple):
     index: int
 
 
-class silentpayments_prevouts_summary:
+class silentpayments_prevouts_summary(NamedTuple):
     # Note that in the secp256k1 PR this data type is opaque, i.e.
     # from the API perspective these fields are not accessible
     pubkey_sum: GE
@@ -69,7 +69,7 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
     recipients.sort(key=lambda r: r.scan_pubkey.to_bytes_compressed())
 
     # create outputs
-    created_outputs = [None]*len(recipients)
+    created_outputs = [bytes()]*len(recipients)
     current_scan_pubkey = recipients[0].scan_pubkey
     k = 0
     for i in range(0, len(recipients)):
@@ -83,12 +83,12 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
         k += 1
         current_scan_pubkey = recipients[i].scan_pubkey
 
-    assert all([co is not None for co in created_outputs])
+    assert all([len(co) == 32 for co in created_outputs])
     return created_outputs
 
 
 def silentpayments_recipient_create_label(scan_key: bytes, m: int) -> tuple[GE, Scalar]:
-    label_tweak = Scalar.from_bytes(tagged_hash("BIP0352/Label", scan_key + m.to_bytes(4, 'big')))
+    label_tweak = Scalar.from_bytes_checked(tagged_hash("BIP0352/Label", scan_key + m.to_bytes(4, 'big')))
     label = label_tweak * G
     return (label, label_tweak)
 
@@ -97,7 +97,8 @@ def silentpayments_recipient_create_labeled_spend_pubkey(unlabeled_spend_pubkey:
     return unlabeled_spend_pubkey + label
 
 
-def silentpayments_recipient_prevouts_summary_create(xonly_pubkeys: List[GE], plain_pubkeys: List[GE]) -> silentpayments_prevouts_summary:
+def silentpayments_recipient_prevouts_summary_create(outpoint_smallest: bytes, xonly_pubkeys: List[GE],
+                                                     plain_pubkeys: List[GE]) -> silentpayments_prevouts_summary:
     # sum up public keys: A_sum = A_1 + A_2 + ... + A_n
     pubkey_sum = GE()
     for xonly_pubkey in xonly_pubkeys:

@@ -11,7 +11,7 @@ from .util import tagged_hash
 class silentpayments_recipient(NamedTuple):
     scan_pubkey: GE
     spend_pubkey: GE
-    index: int
+    index_: int  # "index" is a built-in name in Python, so work-around that with postfix _
 
 
 # Note that in the secp256k1 PR this data type is opaque, i.e.
@@ -55,7 +55,7 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
     if (len(taproot_seckeys) + len(plain_seckeys)) == 0:
         raise ValueError("At least one secret key must be provided.")
     for i in range(len(recipients)):
-        if recipients[i].index != i:
+        if recipients[i].index_ != i:
             raise ValueError("Recipient index mismatch.")
 
     # sum up secret keys: a_sum = a_1 + a_2 + ... + a_n
@@ -91,7 +91,7 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
             shared_secret = (secret_component * recipients[i].scan_pubkey).to_bytes_compressed()
             k = 0
         output_xonly = _create_output_pubkey(shared_secret, recipients[i].spend_pubkey, k)
-        created_outputs[recipients[i].index] = output_xonly
+        created_outputs[recipients[i].index_] = output_xonly
         k += 1
         current_scan_pubkey = recipients[i].scan_pubkey
 

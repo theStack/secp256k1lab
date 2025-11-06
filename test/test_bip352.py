@@ -174,7 +174,7 @@ class BIP352Tests(unittest.TestCase):
                 ikm.smallest_outpoint, ikm.xonly_pubkeys, ikm.plain_pubkeys)
             all_input_pubkeys = ikm.plain_pubkeys + ikm.xonly_pubkeys
             self.assertEqual(GE.sum(*all_input_pubkeys), prevouts_summary.pubkey_sum)
-        except:
+        except Exception:
             assert test_vector['expected']['outputs'] == []
             return
 

@@ -178,12 +178,14 @@ class BIP352Tests(unittest.TestCase):
             assert test_vector['expected']['outputs'] == []
             return
 
+        # TODO: distribute labels cache if necessary
+        labels_cache = None
         found_outputs_info = silentpayments_recipient_scan_outputs(outputs_to_check, scan_seckey, prevouts_summary,
-            spend_pubkey)
+            spend_pubkey, labels_cache)
         found_outputs = [fo.output for fo in found_outputs_info]
 
         success = sorted(found_outputs) == sorted(expected_outputs)
         if not success:
             print(f"found outputs: {[o.hex() for o in found_outputs]}")
             print(f"expected outputs: {[o.hex() for o in expected_outputs]}")
-        # TODO: implement labels testing
+        self.assertTrue(success)

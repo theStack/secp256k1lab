@@ -2,7 +2,7 @@
 # the primary purpose is help reviewing the "silentpayments" module PR in
 # libsecp256k1 (PR #1765, see https://github.com/bitcoin-core/secp256k1/pull/1765)
 # by providing an executable pseudo-code of it
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional
 
 from .secp256k1 import GE, G, Scalar
 from .util import tagged_hash
@@ -23,7 +23,7 @@ class silentpayments_prevouts_summary(NamedTuple):
 
 class silentpayments_found_output(NamedTuple):
     output: bytes  # serialized x-only pubkey
-    tweak: bytes
+    tweak: Scalar
     found_with_label: bool
     label: GE
 
@@ -128,10 +128,11 @@ def silentpayments_recipient_prevouts_summary_create(outpoint_smallest: bytes, x
     return silentpayments_prevouts_summary(pubkey_sum, input_hash)
 
 
-# to keep it simple, the label lookup is hardcoded here and not passed as parameter
+# to keep it simple, the label lookup is implemented here by passing the labels cache directly
 def silentpayments_recipient_scan_outputs(tx_outputs: List[bytes], scan_key: bytes,
                                           prevouts_summary: silentpayments_prevouts_summary,
-                                          unlabeled_spend_pubkey: GE) -> List[silentpayments_found_output]:
+                                          unlabeled_spend_pubkey: GE,
+                                          labels_cache: Optional[dict[bytes, bytes]]) -> List[silentpayments_found_output]:
     # calculate the shared secret
     secret_component = prevouts_summary.input_hash * Scalar.from_bytes_checked(scan_key)
     shared_secret = (secret_component * prevouts_summary.pubkey_sum).to_bytes_compressed()
@@ -145,6 +146,7 @@ def silentpayments_recipient_scan_outputs(tx_outputs: List[bytes], scan_key: byt
         output_ge = unlabeled_spend_pubkey + (output_tweak * G)
         output_xonly = output_ge.to_bytes_xonly()
         found = False
+        label_tweak = None
         for j in range(0, len(tx_outputs)):
             # check for direct match (no labels involved)
             if output_xonly == tx_outputs[j]:
@@ -152,14 +154,41 @@ def silentpayments_recipient_scan_outputs(tx_outputs: List[bytes], scan_key: byt
                 found_idx = j
                 break
 
-            # TODO: implement label scanning
+            # scan for labels, if a labels cache is available (passed as lookup function in secp PR)
+            if labels_cache is not None:
+                tx_output_ge = GE.from_bytes_xonly(tx_outputs[j])
+                # calculate first scan label candidate
+                label_ge = tx_output_ge - output_ge
+                label33 = label_ge.to_bytes_compressed()
+                label_tweak = labels_cache.get(label33)
+                if label_tweak is not None:
+                    found = True
+                    found_idx = j
+                    break
+
+                # calculate second scan label candidate
+                label_ge = -tx_output_ge - output_ge
+                label33 = label_ge.to_bytes_compressed()
+                label_tweak = labels_cache.get(label33)
+                if label_tweak is not None:
+                    found = True
+                    found_idx = j
+                    break
 
         if found:
             fo_output = tx_outputs[found_idx]
-            fo_tweak = output_tweak.to_bytes()
-            fo_found_with_label = False
-            fo_label = GE()  # invalid label
-            found_outputs.append(silentpayments_found_output( fo_output, fo_tweak, fo_found_with_label, fo_label))
+            fo_tweak = output_tweak
+            if label_tweak is not None:
+                fo_found_with_label = True
+                fo_tweak += Scalar.from_bytes_checked(label_tweak)
+                fo_label = label_ge
+            else:
+                fo_found_with_label = False
+                fo_label = GE()  # invalid label
+            found_outputs.append(silentpayments_found_output(fo_output, fo_tweak, fo_found_with_label, fo_label))
+
+            # reset everything for the next round of scanning
+            label_tweak = None
         else:
             break
 

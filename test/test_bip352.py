@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, NamedTuple
 import unittest
 
+from secp256k1lab.bip340 import schnorr_sign
 from secp256k1lab.bip352 import (
     silentpayments_sender_create_outputs,
     silentpayments_recipient,
@@ -167,8 +168,6 @@ class BIP352Tests(unittest.TestCase):
         spend_seckey = bytes.fromhex(test_vector['given']['key_material']['spend_priv_key'])
         spend_pubkey = Scalar.from_bytes_checked(spend_seckey) * G
 
-        expected_outputs = [bytes.fromhex(eo['pub_key']) for eo in test_vector['expected']['outputs']]
-
         try:
             prevouts_summary = silentpayments_recipient_prevouts_summary_create(
                 ikm.smallest_outpoint, ikm.xonly_pubkeys, ikm.plain_pubkeys)
@@ -186,12 +185,31 @@ class BIP352Tests(unittest.TestCase):
                 label, label_tweak = silentpayments_recipient_create_label(scan_seckey, m)
                 labels_cache[label.to_bytes_compressed()] = label_tweak.to_bytes()
 
-        found_outputs_info = silentpayments_recipient_scan_outputs(outputs_to_check, scan_seckey, prevouts_summary,
+        found_outputs = silentpayments_recipient_scan_outputs(outputs_to_check, scan_seckey, prevouts_summary,
             spend_pubkey, labels_cache)
-        found_outputs = [fo.output for fo in found_outputs_info]
 
-        success = sorted(found_outputs) == sorted(expected_outputs)
+        # also check tweaks
+        MSG = sha256(b"message")
+        AUX = sha256(b"random auxiliary data")
+        found_signatures = []
+        for found_output in found_outputs:
+            full_seckey = (Scalar.from_bytes_checked(spend_seckey) + found_output.tweak).to_bytes()
+            signature = schnorr_sign(MSG, full_seckey, AUX)
+            found_signatures.append(signature)
+
+        # compare expected and scanned outputs (including calculated seckey tweaks and signatures)
+        matches = 0
+        for i, found_output in enumerate(found_outputs):
+            for expected_output_data in test_vector['expected']['outputs']:
+                expected_output = bytes.fromhex(expected_output_data['pub_key'])
+                if found_output.output == expected_output:
+                    assert found_output.tweak.to_bytes() == bytes.fromhex(expected_output_data['priv_key_tweak'])
+                    assert found_signatures[i] == bytes.fromhex(expected_output_data['signature'])
+                    matches += 1
+                    break
+
+        success = matches == len(found_outputs) == len(test_vector['expected']['outputs'])
         if not success:
-            print(f"found outputs: {[o.hex() for o in found_outputs]}")
-            print(f"expected outputs: {[o.hex() for o in expected_outputs]}")
+            print(f"found outputs: {[o.output.hex() for o in found_outputs]}")
+            print(f"expected outputs: {[o for o in test_vector['expected']['outputs']]}")
         self.assertTrue(success)

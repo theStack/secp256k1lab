@@ -8,25 +8,7 @@ from .secp256k1 import GE, G, Scalar
 from .util import tagged_hash
 
 
-class silentpayments_recipient(NamedTuple):
-    scan_pubkey: GE
-    spend_pubkey: GE
-    index_: int  # "index" is a built-in name in Python, so work-around that with postfix _
-
-
-# Note that in the secp256k1 PR this data type is opaque, i.e.
-# from the API perspective these fields are not accessible
-class silentpayments_prevouts_summary(NamedTuple):
-    pubkey_sum: GE
-    input_hash: Scalar
-
-
-class silentpayments_found_output(NamedTuple):
-    output: bytes  # serialized x-only pubkey
-    tweak: Scalar
-    found_with_label: bool
-    label: GE
-
+# internal functions (declared as "static" in the secp256k1 module)
 
 def _create_input_hash(outpoint_smallest: bytes, pubkey_sum: GE) -> Scalar:
     assert len(outpoint_smallest) == 36
@@ -44,6 +26,18 @@ def _create_output_pubkey(shared_secret: bytes, spend_pubkey: GE, k: int) -> byt
     assert len(shared_secret) == 33
     output_tweak = _create_output_tweak(shared_secret, k)
     return (spend_pubkey + output_tweak * G).to_bytes_xonly()
+
+
+# public structs and functions (declared in the API header include/secp256k1_silentpayments.h)
+
+#######################
+##### Sender side #####
+#######################
+
+class silentpayments_recipient(NamedTuple):
+    scan_pubkey: GE
+    spend_pubkey: GE
+    index_: int  # "index" is a built-in name in Python, so work-around that with postfix _
 
 
 def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipient], outpoint_smallest: bytes,
@@ -75,8 +69,8 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
     # derive input_hash = hash(outpoint_smallest || A_sum)
     pubkey_sum = seckey_sum * G
     input_hash = _create_input_hash(outpoint_smallest, pubkey_sum)
-    # calculate secret component of the shared secret
-    secret_component = input_hash * seckey_sum
+    # calculate scalar_part of the shared secret
+    shared_secret_scalar_part = input_hash * seckey_sum
 
     # group recipients by scan public key
     recipients.sort(key=lambda r: r.scan_pubkey.to_bytes_compressed())
@@ -88,7 +82,7 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
     for i in range(0, len(recipients)):
         if i == 0 or recipients[i].scan_pubkey != current_scan_pubkey:
             # if we are on a different scan pubkey, its time to recreate the shared secret and reset k to 0
-            shared_secret = (secret_component * recipients[i].scan_pubkey).to_bytes_compressed()
+            shared_secret = (shared_secret_scalar_part * recipients[i].scan_pubkey).to_bytes_compressed()
             k = 0
         output_xonly = _create_output_pubkey(shared_secret, recipients[i].spend_pubkey, k)
         created_outputs[recipients[i].index_] = output_xonly
@@ -99,6 +93,10 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
     return created_outputs
 
 
+##########################################
+##### Receiver side - label creation #####
+##########################################
+
 def silentpayments_recipient_create_label(scan_key: bytes, m: int) -> tuple[GE, Scalar]:
     label_tweak = Scalar.from_bytes_checked(tagged_hash("BIP0352/Label", scan_key + m.to_bytes(4, 'big')))
     label = label_tweak * G
@@ -107,6 +105,17 @@ def silentpayments_recipient_create_label(scan_key: bytes, m: int) -> tuple[GE, 
 
 def silentpayments_recipient_create_labeled_spend_pubkey(unlabeled_spend_pubkey: GE, label: GE) -> GE:
     return unlabeled_spend_pubkey + label
+
+
+####################################
+##### Receiver side - scanning #####
+####################################
+
+# Note that in the secp256k1 PR this data type is opaque, i.e.
+# from the API perspective these fields are not accessible
+class silentpayments_prevouts_summary(NamedTuple):
+    pubkey_sum: GE
+    input_hash: Scalar
 
 
 def silentpayments_recipient_prevouts_summary_create(outpoint_smallest: bytes, xonly_pubkeys: List[GE],
@@ -128,14 +137,21 @@ def silentpayments_recipient_prevouts_summary_create(outpoint_smallest: bytes, x
     return silentpayments_prevouts_summary(pubkey_sum, input_hash)
 
 
+class silentpayments_found_output(NamedTuple):
+    output: bytes  # serialized x-only pubkey
+    tweak: Scalar  # tweak needed to spend the output (with seckey = spend_seckey + tweak)
+    found_with_label: bool
+    label: GE
+
+
 # to keep it simple, the label lookup is implemented here by passing the labels cache directly
 def silentpayments_recipient_scan_outputs(tx_outputs: List[bytes], scan_key: bytes,
                                           prevouts_summary: silentpayments_prevouts_summary,
                                           unlabeled_spend_pubkey: GE,
                                           labels_cache: Optional[dict[bytes, bytes]]) -> List[silentpayments_found_output]:
     # calculate the shared secret
-    secret_component = prevouts_summary.input_hash * Scalar.from_bytes_checked(scan_key)
-    shared_secret = (secret_component * prevouts_summary.pubkey_sum).to_bytes_compressed()
+    shared_secret_scalar_part = prevouts_summary.input_hash * Scalar.from_bytes_checked(scan_key)
+    shared_secret = (shared_secret_scalar_part * prevouts_summary.pubkey_sum).to_bytes_compressed()
 
     # scan through all outputs starting with k = 0;
     # if an output is found, repeat with k = 1, etc.

@@ -145,7 +145,7 @@ class silentpayments_found_output(NamedTuple):
 
 
 # to keep it simple, the label lookup is implemented here by passing the labels cache directly
-def silentpayments_recipient_scan_outputs(tx_outputs: List[bytes], scan_key: bytes,
+def silentpayments_recipient_scan_outputs(tx_outputs: List[Optional[bytes]], scan_key: bytes,
                                           prevouts_summary: silentpayments_prevouts_summary,
                                           unlabeled_spend_pubkey: GE,
                                           labels_cache: Optional[dict[bytes, bytes]]) -> List[silentpayments_found_output]:
@@ -164,6 +164,8 @@ def silentpayments_recipient_scan_outputs(tx_outputs: List[bytes], scan_key: byt
         found = False
         label_tweak = None
         for j in range(0, len(tx_outputs)):
+            if tx_outputs[j] is None:  # skip already-matched outputs
+                continue
             # check for direct match (no labels involved)
             if output_xonly == tx_outputs[j]:
                 found = True
@@ -193,6 +195,8 @@ def silentpayments_recipient_scan_outputs(tx_outputs: List[bytes], scan_key: byt
 
         if found:
             fo_output = tx_outputs[found_idx]
+            assert fo_output is not None
+            tx_outputs[found_idx] = None  # mark this output as matched
             fo_tweak = output_tweak
             if label_tweak is not None:
                 fo_found_with_label = True

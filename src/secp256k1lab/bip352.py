@@ -16,14 +16,22 @@ def _create_input_hash(outpoint_smallest: bytes, pubkey_sum: GE) -> Scalar:
     return Scalar.from_bytes_checked(tagged_hash("BIP0352/Inputs", data_to_hash))
 
 
+def _create_shared_secret(public_component: GE, secret_component: Scalar) -> bytes:
+    shared_secret = (secret_component * public_component).to_bytes_compressed()
+    assert len(shared_secret) == 33
+    return shared_secret
+
+
 def _create_output_tweak(shared_secret: bytes, k: int) -> Scalar:
     assert len(shared_secret) == 33
+    assert (0 <= k < 2**32)
     data_to_hash = shared_secret + k.to_bytes(4, 'big')
     return Scalar.from_bytes_checked(tagged_hash("BIP0352/SharedSecret", data_to_hash))
 
 
 def _create_output_pubkey(shared_secret: bytes, spend_pubkey: GE, k: int) -> bytes:
     assert len(shared_secret) == 33
+    assert (0 <= k < 2**32)
     output_tweak = _create_output_tweak(shared_secret, k)
     return (spend_pubkey + output_tweak * G).to_bytes_xonly()
 
@@ -82,7 +90,7 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
     for i in range(0, len(recipients)):
         if i == 0 or recipients[i].scan_pubkey != current_scan_pubkey:
             # if we are on a different scan pubkey, its time to recreate the shared secret and reset k to 0
-            shared_secret = (shared_secret_scalar_part * recipients[i].scan_pubkey).to_bytes_compressed()
+            shared_secret = _create_shared_secret(recipients[i].scan_pubkey, shared_secret_scalar_part)
             k = 0
         output_xonly = _create_output_pubkey(shared_secret, recipients[i].spend_pubkey, k)
         created_outputs[recipients[i].index_] = output_xonly
@@ -151,7 +159,7 @@ def silentpayments_recipient_scan_outputs(tx_outputs: List[Optional[bytes]], sca
                                           labels_cache: Optional[dict[bytes, bytes]]) -> List[silentpayments_found_output]:
     # calculate the shared secret
     shared_secret_scalar_part = prevouts_summary.input_hash * Scalar.from_bytes_checked(scan_key)
-    shared_secret = (shared_secret_scalar_part * prevouts_summary.pubkey_sum).to_bytes_compressed()
+    shared_secret = _create_shared_secret(prevouts_summary.pubkey_sum, shared_secret_scalar_part)
 
     # scan through all outputs starting with k = 0;
     # if an output is found, repeat with k = 1, etc.

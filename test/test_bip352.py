@@ -9,11 +9,12 @@ from secp256k1lab.bip352 import (
     silentpayments_sender_create_outputs,
     silentpayments_recipient,
     silentpayments_recipient_label_create,
-    #silentpayments_recipient_label_parse,
+    silentpayments_recipient_label_parse,
     silentpayments_recipient_label_serialize,
     #silentpayments_recipient_create_labeled_spend_pubkey,
     silentpayments_recipient_prevouts_summary_create,
     silentpayments_recipient_scan_outputs,
+    silentpayments_recipient_scan_outputs_with_labelset,
 )
 from secp256k1lab.secp256k1 import GE, G, Scalar
 
@@ -189,6 +190,16 @@ class BIP352Tests(unittest.TestCase):
 
         found_outputs = silentpayments_recipient_scan_outputs(outputs_to_check, scan_seckey, prevouts_summary,
             spend_pubkey, labels_cache)
+
+        # test for alternative "LabelSet scanning" approach
+        label_set = []
+        if labels_cache is not None:
+            for label, label_tweak in labels_cache.items():
+                label_set.append((silentpayments_recipient_label_parse(label), Scalar.from_bytes_checked(label_tweak)))
+        outputs_to_check = [bytes.fromhex(o) for o in test_vector['given']['outputs']]  # restore outputs
+        found_outputs2 = silentpayments_recipient_scan_outputs_with_labelset(
+            outputs_to_check, scan_seckey, prevouts_summary, spend_pubkey, label_set)
+        self.assertEqual(found_outputs, found_outputs2)
 
         # also check tweaks
         MSG = sha256(b"message")

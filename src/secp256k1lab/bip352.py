@@ -229,3 +229,77 @@ def silentpayments_recipient_scan_outputs(tx_outputs: List[Optional[bytes]], sca
             break
 
     return found_outputs
+
+
+### Alternative "LabelSet scanning" approach #######################################################
+#
+# The following is an alternative scanning approach which ought to be faster if the
+# number of labels to scan for is reasonably small. Rather than iterating through all tx outputs
+# and calculating possible label candidates to look up in the labels cache (that's the
+# "BIP scanning" approach and the one currently implemented in secp PR #1765), it works by
+# doing it in the other direction: for each label in the passed label set, calculate the
+# possible tx output candidate and look it up in the list of tx outputs to detect if there
+# is a match. For a fast lookup in the tx outputs, these are sorted first and then found
+# via binary search. Note that in contrast to the "BIP scanning" approach, the tx outputs
+# are not treated as group elements, as we don't do any elliptic curve calculations with
+# them, so passing them in their raw x-only serialization is sufficient.
+# 
+# see https://gist.github.com/theStack/25c77747838610931e8bbeb9d76faf78
+# for a description with benchmark results, comparing the BIP and LabelSet approaches
+####################################################################################################
+
+def _silentpayments_tx_output_find(tx_outputs_sorted: List[bytes], tx_output: bytes) -> int:
+    import bisect  # in the secp256k1 module, this is implemented using handwritten binary search
+    idx = bisect.bisect_left(tx_outputs_sorted, tx_output)
+    if idx != len(tx_outputs_sorted) and tx_outputs_sorted[idx] == tx_output:
+        return idx
+    else:
+        return -1
+
+
+def silentpayments_recipient_scan_outputs_with_labelset(tx_outputs: List[bytes], scan_key: bytes,
+                                                        prevouts_summary: silentpayments_prevouts_summary,
+                                                        unlabeled_spend_pubkey: GE,
+                                                        label_set_to_scan: List[tuple[GE, bytes]]) -> List[silentpayments_found_output]:
+    # calculate the shared secret
+    shared_secret_scalar_part = prevouts_summary.input_hash * Scalar.from_bytes_checked(scan_key)
+    shared_secret = _create_shared_secret(prevouts_summary.pubkey_sum, shared_secret_scalar_part)
+
+    # sort transaction outputs to find them fast using binary search
+    tx_outputs.sort()
+
+    # scan through all outputs starting with k = 0;
+    # if an output is found, repeat with k = 1, etc.
+    found_outputs = []
+    for k in range(0, len(tx_outputs)):
+        found_for_k = False
+        unlabeled_output_tweak = _create_output_tweak(shared_secret, k)
+        unlabeled_output_ge = unlabeled_spend_pubkey + (unlabeled_output_tweak * G)
+        unlabeled_output_xonly = unlabeled_output_ge.to_bytes_xonly()
+        # check for direct match (no labels involved)
+        idx = _silentpayments_tx_output_find(tx_outputs, unlabeled_output_xonly)
+        if idx >= 0:
+            found_outputs.append(silentpayments_found_output(
+                unlabeled_output_xonly, unlabeled_output_tweak, False, GE()
+            ))
+            found_for_k = True
+
+        # scan for labels, if a non-empty label set was passed
+        if not found_for_k and len(label_set_to_scan) > 0:
+            for (label_ge, label_tweak) in label_set_to_scan:
+                labeled_output_ge = unlabeled_output_ge + label_ge
+                labeled_output_xonly = labeled_output_ge.to_bytes_xonly()
+                idx = _silentpayments_tx_output_find(tx_outputs, labeled_output_xonly)
+                if idx >= 0:
+                    labeled_output_tweak = unlabeled_output_tweak + label_tweak
+                    found_outputs.append(silentpayments_found_output(
+                        labeled_output_xonly, labeled_output_tweak, True, label_ge
+                    ))
+                    found_for_k = True
+                    break  # leave label set iteration loop
+
+        # if no output was found for this k, we are done
+        if not found_for_k:
+            break
+
+    return found_outputs

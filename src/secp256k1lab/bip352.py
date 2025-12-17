@@ -272,7 +272,6 @@ def silentpayments_recipient_scan_outputs_with_labelset(tx_outputs: List[bytes],
     # if an output is found, repeat with k = 1, etc.
     found_outputs = []
     for k in range(0, len(tx_outputs)):
-        found_for_k = False
         unlabeled_output_tweak = _create_output_tweak(shared_secret, k)
         unlabeled_output_ge = unlabeled_spend_pubkey + (unlabeled_output_tweak * G)
         unlabeled_output_xonly = unlabeled_output_ge.to_bytes_xonly()
@@ -282,24 +281,26 @@ def silentpayments_recipient_scan_outputs_with_labelset(tx_outputs: List[bytes],
             found_outputs.append(silentpayments_found_output(
                 unlabeled_output_xonly, unlabeled_output_tweak, False, GE()
             ))
-            found_for_k = True
+            continue  # we had a match, continue with next k value
 
-        # scan for labels, if a non-empty label set was passed
-        if not found_for_k and len(label_set_to_scan) > 0:
-            for (label_ge, label_tweak) in label_set_to_scan:
-                labeled_output_ge = unlabeled_output_ge + label_ge
-                labeled_output_xonly = labeled_output_ge.to_bytes_xonly()
-                idx = _silentpayments_tx_output_find(tx_outputs, labeled_output_xonly)
-                if idx >= 0:
-                    labeled_output_tweak = unlabeled_output_tweak + label_tweak
-                    found_outputs.append(silentpayments_found_output(
-                        labeled_output_xonly, labeled_output_tweak, True, label_ge
-                    ))
-                    found_for_k = True
-                    break  # leave label set iteration loop
+        # check for label matches by iterating through all of them and
+        # look up each output candidate in the list of tx outputs
+        labeled_match = False
+        for (label_ge, label_tweak) in label_set_to_scan:
+            labeled_output_ge = unlabeled_output_ge + label_ge
+            labeled_output_xonly = labeled_output_ge.to_bytes_xonly()
+            idx = _silentpayments_tx_output_find(tx_outputs, labeled_output_xonly)
+            if idx >= 0:
+                labeled_output_tweak = unlabeled_output_tweak + label_tweak
+                found_outputs.append(silentpayments_found_output(
+                    labeled_output_xonly, labeled_output_tweak, True, label_ge
+                ))
+                labeled_match = True
+                break  # leave label set iteration loop
+        if labeled_match:
+            continue  # we had a match, continue with next k value
 
-        # if no output was found for this k, we are done
-        if not found_for_k:
-            break
+        # no match, stop searching further
+        break
 
     return found_outputs

@@ -105,7 +105,15 @@ def silentpayments_sender_create_outputs(recipients: List[silentpayments_recipie
 ##### Receiver side - label creation #####
 ##########################################
 
-def silentpayments_recipient_create_label(scan_key: bytes, m: int) -> tuple[GE, Scalar]:
+def silentpayments_recipient_label_parse(label_ser: bytes) -> GE:
+    return GE.from_bytes_compressed(label_ser)
+
+
+def silentpayments_recipient_label_serialize(label: GE) -> bytes:
+    return label.to_bytes_compressed()
+
+
+def silentpayments_recipient_label_create(scan_key: bytes, m: int) -> tuple[GE, Scalar]:
     label_tweak = Scalar.from_bytes_checked(tagged_hash("BIP0352/Label", scan_key + m.to_bytes(4, 'big')))
     label = label_tweak * G
     return (label, label_tweak)

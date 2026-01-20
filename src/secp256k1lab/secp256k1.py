@@ -33,13 +33,15 @@ class APrimeFE:
         if isinstance(a, type(self)):
             num = a._num
             den = a._den
-        elif isinstance(a, int):
+        else:
+            assert isinstance(a, int)
             num = a % self.SIZE
             den = 1
         if isinstance(b, type(self)):
             den = (den * b._num) % self.SIZE
             num = (num * b._den) % self.SIZE
-        elif isinstance(b, int):
+        else:
+            assert isinstance(b, int)
             den = (den * b) % self.SIZE
         assert den != 0
         if num == 0:
@@ -257,8 +259,8 @@ class GE:
             self._infinity = True
         else:
             # Initialize as point on the curve (and check that it is).
-            assert x != None
-            assert y != None
+            assert x is not None
+            assert y is not None
             fx = FE(x)
             fy = FE(y)
             assert fy**2 == fx**3 + 7
@@ -469,11 +471,11 @@ class FastGEMul:
             p = p + p
             self.table.append(p)
 
-    def mul(self, a_: Scalar) -> GE:
+    def mul(self, a: Scalar | int) -> GE:
         result = GE()
-        a = int(a_)
-        for bit in range(a.bit_length()):
-            if a & (1 << bit):
+        a_ = int(a)
+        for bit in range(a_.bit_length()):
+            if a_ & (1 << bit):
                 result += self.table[bit]
         return result
 

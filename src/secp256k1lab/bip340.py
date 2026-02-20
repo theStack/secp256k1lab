@@ -14,9 +14,7 @@ def pubkey_gen(seckey: bytes) -> bytes:
     return P.to_bytes_xonly()
 
 
-def schnorr_sign(
-    msg: bytes, seckey: bytes, aux_rand: bytes, tag_prefix: str = "BIP0340"
-) -> bytes:
+def schnorr_sign(msg: bytes, seckey: bytes, aux_rand: bytes) -> bytes:
     d0 = int_from_bytes(seckey)
     if not (1 <= d0 <= GE.ORDER - 1):
         raise ValueError("The secret key must be an integer in the range 1..n-1.")
@@ -25,9 +23,9 @@ def schnorr_sign(
     P = d0 * G
     assert not P.infinity
     d = d0 if P.has_even_y() else GE.ORDER - d0
-    t = xor_bytes(bytes_from_int(d), tagged_hash(tag_prefix + "/aux", aux_rand))
+    t = xor_bytes(bytes_from_int(d), tagged_hash("BIP0340/aux", aux_rand))
     k0 = (
-        int_from_bytes(tagged_hash(tag_prefix + "/nonce", t + P.to_bytes_xonly() + msg))
+        int_from_bytes(tagged_hash("BIP0340/nonce", t + P.to_bytes_xonly() + msg))
         % GE.ORDER
     )
     if k0 == 0:
@@ -38,19 +36,17 @@ def schnorr_sign(
     e = (
         int_from_bytes(
             tagged_hash(
-                tag_prefix + "/challenge", R.to_bytes_xonly() + P.to_bytes_xonly() + msg
+                "BIP0340/challenge", R.to_bytes_xonly() + P.to_bytes_xonly() + msg
             )
         )
         % GE.ORDER
     )
     sig = R.to_bytes_xonly() + bytes_from_int((k + e * d) % GE.ORDER)
-    assert schnorr_verify(msg, P.to_bytes_xonly(), sig, tag_prefix=tag_prefix)
+    assert schnorr_verify(msg, P.to_bytes_xonly(), sig)
     return sig
 
 
-def schnorr_verify(
-    msg: bytes, pubkey: bytes, sig: bytes, tag_prefix: str = "BIP0340"
-) -> bool:
+def schnorr_verify(msg: bytes, pubkey: bytes, sig: bytes) -> bool:
     if len(pubkey) != 32:
         raise ValueError("The public key must be a 32-byte array.")
     if len(sig) != 64:
@@ -64,7 +60,7 @@ def schnorr_verify(
     if (r >= FE.SIZE) or (s >= GE.ORDER):
         return False
     e = (
-        int_from_bytes(tagged_hash(tag_prefix + "/challenge", sig[0:32] + pubkey + msg))
+        int_from_bytes(tagged_hash("BIP0340/challenge", sig[0:32] + pubkey + msg))
         % GE.ORDER
     )
     R = s * G - e * P

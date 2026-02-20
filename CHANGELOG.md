@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    point at infinity. This is the counterpart to the already existing serialization
    method `GE.to_bytes_compressed_with_infinity`.
 
+#### Changed
+ - Removed the `tag_prefix` parameter from the BIP340 `schnorr_{sign,verify}` functions.
+   The challenge tag is a constant in BIP340 and not intended to be customized. For domain
+   separation, it is recommended to either pre-hash or prefix the message instead, see
+   https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki#user-content-Domain_Separation.
+
 ## [1.0.0] - 2025-03-31
 
 Initial release.
